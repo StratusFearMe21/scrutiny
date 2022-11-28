@@ -68,6 +68,10 @@ func DeleteDevice(c *gin.Context) {
 				c.JSON(http.StatusInternalServerError, gin.H{"success": false})
 				return
 			}
+		} else {	
+			logger.Errorln("An error occurred while deleting device <no jwt>")
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false})
+			return
 		}
 	}
 

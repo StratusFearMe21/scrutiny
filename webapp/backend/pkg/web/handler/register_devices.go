@@ -11,7 +11,6 @@ import (
 	"github.com/sirupsen/logrus"
 	"net/http"
 	"os"
-	"strings"
 )
 
 // register devices that are detected by various collectors.
@@ -22,15 +21,7 @@ func RegisterDevices(c *gin.Context) {
 	appConfig := c.MustGet("CONFIG").(config.Interface)
 	nc_uids := appConfig.GetStringSlice("nextcloud.uids")
 
-	real_ip := ""
-
-	if val, ok := c.Request.Header["X-Real-IP"]; ok {
-		real_ip = val[0]
-	} else {
-		real_ip = c.Request.RemoteAddr
-	}
-
-	if !strings.HasPrefix(real_ip, "127.0.0.1") && len(nc_uids) != 0 {
+	if c.ClientIP() != "127.0.0.1" && len(nc_uids) != 0 {
 		jwt_string, jwt_present := c.GetQuery("jwt")
 		if jwt_present {
 			token, err := jwt.Parse(jwt_string, func(token *jwt.Token) (interface{}, error) {
@@ -71,6 +62,10 @@ func RegisterDevices(c *gin.Context) {
 				c.JSON(http.StatusInternalServerError, gin.H{"success": false})
 				return
 			}
+		} else {
+			logger.Errorln("An error occurred while registering devices <no jwt>")
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false})
+			return
 		}
 	}
 
