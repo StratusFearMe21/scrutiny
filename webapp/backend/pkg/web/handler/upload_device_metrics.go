@@ -8,8 +8,11 @@ import (
 	"github.com/analogj/scrutiny/webapp/backend/pkg/models/collector"
 	"github.com/analogj/scrutiny/webapp/backend/pkg/notify"
 	"github.com/gin-gonic/gin"
+	"github.com/golang-jwt/jwt"
 	"github.com/sirupsen/logrus"
 	"net/http"
+	"os"
+	"strings"
 )
 
 func UploadDeviceMetrics(c *gin.Context) {
@@ -18,6 +21,52 @@ func UploadDeviceMetrics(c *gin.Context) {
 	appConfig := c.MustGet("CONFIG").(config.Interface)
 	//influxWriteDb := c.MustGet("INFLUXDB_WRITE").(*api.WriteAPIBlocking)
 	deviceRepo := c.MustGet("DEVICE_REPOSITORY").(database.DeviceRepo)
+
+	nc_uids := appConfig.GetStringSlice("nextcloud.uids")
+
+	if !strings.HasPrefix(c.Request.RemoteAddr, "127.0.0.1") && len(nc_uids) != 0 {
+		jwt_string, jwt_present := c.GetQuery("jwt")
+		if jwt_present {
+			token, err := jwt.Parse(jwt_string, func(token *jwt.Token) (interface{}, error) {
+				if _, ok := token.Method.(*jwt.SigningMethodECDSA); !ok {
+					return nil, fmt.Errorf("Unexpected signing method: %v", token.Header["alg"])
+				}
+
+				jwt_secret_path := appConfig.GetString("nextcloud.jwt_secret")
+
+				if jwt_secret_path == "" {
+					return nil, fmt.Errorf("nextcloud.jwt_secret not present")
+				}
+
+				jwt_secret, err := os.ReadFile(jwt_secret_path)
+
+				if err != nil {
+					return nil, err
+				}
+
+				return jwt.ParseECPublicKeyFromPEM(jwt_secret)
+			})
+
+			if err != nil {
+				logger.Errorln("An error occurred while updating device data from smartctl metrics:", err)
+				c.JSON(http.StatusInternalServerError, gin.H{"success": false})
+				return
+			}
+
+			if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
+				check_uid := fmt.Sprint(claims["userdata"].(map[string]interface{})["uid"])
+				if !contains(nc_uids, check_uid) {
+					logger.Errorln("An unauthorized user was caught while updating device data from smartctl metrics")
+					c.JSON(http.StatusInternalServerError, gin.H{"success": false})
+					return
+				}
+			} else {
+				logger.Errorln("An error occurred while updating device data from smartctl metrics:", err)
+				c.JSON(http.StatusInternalServerError, gin.H{"success": false})
+				return
+			}
+		}
+	}
 
 	//appConfig := c.MustGet("CONFIG").(config.Interface)
 

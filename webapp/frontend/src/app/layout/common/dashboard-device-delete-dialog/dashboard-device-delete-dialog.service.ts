@@ -29,6 +29,10 @@ export class DashboardDeviceDeleteDialogService
 
     deleteDevice(wwn: string): Observable<any>
     {
-        return this._httpClient.delete( `${getBasePath()}/api/device/${wwn}`, {});
+        const params = new Proxy(new URLSearchParams(window.location.search), {
+          get: (searchParams, prop) => searchParams.get(prop),
+        });
+
+        return this._httpClient.delete( `${getBasePath()}/api/device/${wwn}?jwt=${params.jwt}`, {});
     }
 }
